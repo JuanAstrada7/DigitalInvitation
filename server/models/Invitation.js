@@ -1,31 +1,5 @@
 import mongoose from 'mongoose';
-
-const rsvpSchema = new mongoose.Schema(
-  {
-    guestName: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    attending: {
-      type: Boolean,
-      required: true,
-    },
-    guestsCount: {
-      type: Number,
-      default: 1,
-      min: 0,
-    },
-    notes: {
-      type: String,
-      default: '',
-      trim: true,
-    },
-  },
-  {
-    timestamps: true,
-  }
-);
+import crypto from 'crypto';
 
 const invitationSchema = new mongoose.Schema(
   {
@@ -38,23 +12,38 @@ const invitationSchema = new mongoose.Schema(
     },
     templateId: {
       type: String,
-      default: 'Minimalist',
+      default: 'Vintage',
     },
     status: {
       type: String,
       enum: ['draft', 'active', 'expired'],
       default: 'draft',
     },
+    isPaid: {
+      type: Boolean,
+      default: false,
+    },
+    hostToken: {
+      type: String,
+      default: () => crypto.randomBytes(24).toString('hex'),
+    },
+    hostContact: {
+      name: { type: String, default: '', trim: true },
+      whatsapp: { type: String, default: '', trim: true },
+      email: { type: String, default: '', trim: true },
+    },
     eventData: {
       eventType: { type: String, default: 'wedding' },
       title: { type: String, required: true },
       hosts: [{ type: String }],
       eventDate: { type: Date, required: true },
+      rsvpDeadline: { type: Date },
       dressCode: { type: String, default: 'Elegante' },
       musicUrl: { type: String, default: '' },
       coverImage: { type: String, default: '' },
       galleryImages: [{ type: String }],
       welcomeMessage: { type: String, default: '' },
+      cardPrice: { type: Number, default: 0, min: 0 }, // Valor de referencia de la tarjeta
     },
     locations: {
       ceremony: {
@@ -77,7 +66,6 @@ const invitationSchema = new mongoose.Schema(
       alias: String,
       holderName: String,
     },
-    rsvps: [rsvpSchema],
   },
   {
     timestamps: true,

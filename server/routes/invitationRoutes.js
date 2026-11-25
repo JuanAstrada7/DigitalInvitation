@@ -2,18 +2,19 @@ import { Router } from 'express';
 import {
   getInvitationBySlug,
   createInvitation,
-  addRsvp,
+  activateInvitation,
   updateInvitation,
 } from '../controllers/invitationController.js';
-import { requireAdminAuth } from '../middleware/auth.js';
+import { requireAdminAuth, requireHostOrAdminAuth } from '../middleware/auth.js';
 
 const router = Router();
 
+// Rutas públicas
 router.get('/:slug', getInvitationBySlug);
-router.post('/:slug/rsvp', addRsvp);
+router.post('/', createInvitation); // Crea el borrador antes del pago
 
-// Rutas protegidas para anfitriones
-router.post('/', requireAdminAuth, createInvitation);
-router.put('/:slug', requireAdminAuth, updateInvitation);
+// Rutas protegidas
+router.put('/:slug', requireHostOrAdminAuth, updateInvitation);
+router.patch('/:slug/activate', requireAdminAuth, activateInvitation); // Activa tras pagar
 
 export default router;

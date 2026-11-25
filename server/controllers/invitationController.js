@@ -1,18 +1,17 @@
 import Invitation from '../models/Invitation.js';
 
-// Obtener una invitación pública por su slug
+// Obtener una invitación por su slug (oculta hostToken al público)
 export const getInvitationBySlug = async (req, res) => {
   const slug = req.params.slug.toLowerCase().trim();
-
-  const invitation = await Invitation.findOne({ slug });
+  const invitation = await Invitation.findOne({ slug }).select('-hostToken');
 
   if (!invitation) {
     return res.status(404).json({ message: 'Invitación no encontrada' });
   }
 
-  if (invitation.status !== 'active') {
-    return res.status(403).json({
-      message: 'Esta invitación aún no está activa',
+  if (invitation.status === 'expired') {
+    return res.status(410).json({
+      message: 'Esta invitación ha expirado',
       status: invitation.status,
     });
   }
@@ -20,74 +19,47 @@ export const getInvitationBySlug = async (req, res) => {
   res.json(invitation);
 };
 
-// Crear una nueva invitación (útil para pruebas o panel admin)
+// Crear borrador público (el cliente arma su invitación antes de pagar)
 export const createInvitation = async (req, res) => {
-  const { slug, templateId, status, eventData, locations, giftRegistry } = req.body;
-
-  const existing = await Invitation.findOne({ slug: slug?.toLowerCase().trim() });
-  if (existing) {
-    return res.status(409).json({ message: 'Ese slug ya está en uso' });
-  }
-
-  const invitation = await Invitation.create({
-    slug,
-    templateId,
-    status,
-    eventData,
-    locations,
-    giftRegistry,
-  });
-
-  res.status(201).json(invitation);
-};
-
-// Registrar confirmación de asistencia (RSVP) en una invitación
-export const addRsvp = async (req, res) => {
   try {
-    const slug = req.params.slug.toLowerCase().trim();
-    const { guestName, attending, guestsCount, notes } = req.body;
+    const { slug, templateId, hostContact, eventData, locations, giftRegistry } = req.body;
 
-    if (!guestName || !String(guestName).trim()) {
-      return res.status(400).json({ message: 'El nombre del invitado es obligatorio' });
-    }
-
-    const invitation = await Invitation.findOne({ slug });
-
-    if (!invitation) {
-      return res.status(404).json({ message: 'Invitación no encontrada' });
-    }
-
-    if (invitation.status !== 'active') {
-      return res.status(403).json({
-        message: 'Esta invitación aún no está activa',
-        status: invitation.status,
+    if (!slug || !eventData?.title || !eventData?.eventDate) {
+      return res.status(400).json({
+        message: 'Faltan datos obligatorios: slug, título y fecha del evento',
       });
     }
 
-    const willAttend = Boolean(attending);
-    const parsedCount = willAttend ? Math.max(1, Number(guestsCount) || 1) : 0;
+    const normalizedSlug = slug.toLowerCase().trim();
+    const existing = await Invitation.findOne({ slug: normalizedSlug });
+    if (existing) {
+      return res.status(409).json({ message: 'Ese enlace personalizado ya está en uso' });
+    }
 
-    invitation.rsvps.push({
-      guestName: String(guestName).trim(),
-      attending: willAttend,
-      guestsCount: parsedCount,
-      notes: notes ? String(notes).trim() : '',
+    const invitation = await Invitation.create({
+      slug: normalizedSlug,
+      templateId: templateId || 'Vintage',
+      status: 'draft', // Siempre nace como borrador hasta el pago
+      isPaid: false,
+      hostContact,
+      eventData,
+      locations,
+      giftRegistry,
     });
 
-    await invitation.save();
-
-    return res.status(201).json({
-      message: 'Confirmación registrada con éxito',
-      rsvps: invitation.rsvps,
+    res.status(201).json({
+      message: 'Borrador creado correctamente',
+      invitation,
+      hostPanelUrl: `/panel/${invitation.slug}?token=${invitation.hostToken}`,
     });
   } catch (error) {
-    console.error('Error al guardar RSVP:', error);
-    return res.status(500).json({ message: 'Error interno al guardar la confirmación' });
+    console.error('Error al crear borrador:', error);
+    res.status(500).json({ message: 'Error interno al crear la invitación' });
   }
 };
 
-// Actualizar una invitación existente por su slug
-export const updateInvitation = async (req, res) => {
+// Activar invitación tras confirmar el pago (solo Admin o Webhook)
+export const activateInvitation = async (req, res) => {
   try {
     const slug = req.params.slug.toLowerCase().trim();
     const invitation = await Invitation.findOne({ slug });
@@ -96,14 +68,41 @@ export const updateInvitation = async (req, res) => {
       return res.status(404).json({ message: 'Invitación no encontrada' });
     }
 
-    const { templateId, status, eventData, locations, giftRegistry } = req.body;
+    invitation.status = 'active';
+    invitation.isPaid = true;
+    await invitation.save();
 
-    if (templateId !== undefined) {
-      invitation.templateId = templateId;
+    res.json({
+      message: 'Invitación activada y lista para compartir por WhatsApp',
+      publicUrl: `/invitacion/${invitation.slug}`,
+      hostPanelUrl: `/panel/${invitation.slug}?token=${invitation.hostToken}`,
+      invitation,
+    });
+  } catch (error) {
+    console.error('Error al activar invitación:', error);
+    res.status(500).json({ message: 'Error interno al activar la invitación' });
+  }
+};
+
+// Actualizar datos de una invitación (Anfitrión con su token o Admin)
+export const updateInvitation = async (req, res) => {
+  try {
+    const slug = req.params.slug.toLowerCase().trim();
+    const invitation = req.invitation || (await Invitation.findOne({ slug }));
+
+    if (!invitation) {
+      return res.status(404).json({ message: 'Invitación no encontrada' });
     }
 
-    if (status !== undefined) {
-      invitation.status = status;
+    const { templateId, hostContact, eventData, locations, giftRegistry } = req.body;
+
+    if (templateId !== undefined) invitation.templateId = templateId;
+    if (hostContact !== undefined) invitation.hostContact = hostContact;
+
+    // Solo el admin general puede cambiar status o isPaid manualmente
+    if (req.isAdmin) {
+      if (req.body.status !== undefined) invitation.status = req.body.status;
+      if (req.body.isPaid !== undefined) invitation.isPaid = Boolean(req.body.isPaid);
     }
 
     if (eventData && typeof eventData === 'object') {
@@ -111,11 +110,7 @@ export const updateInvitation = async (req, res) => {
         typeof invitation.eventData?.toObject === 'function'
           ? invitation.eventData.toObject()
           : invitation.eventData || {};
-
-      invitation.eventData = {
-        ...currentEventData,
-        ...eventData,
-      };
+      invitation.eventData = { ...currentEventData, ...eventData };
     }
 
     if (locations !== undefined) {
@@ -127,15 +122,10 @@ export const updateInvitation = async (req, res) => {
         typeof invitation.giftRegistry?.toObject === 'function'
           ? invitation.giftRegistry.toObject()
           : invitation.giftRegistry || {};
-
-      invitation.giftRegistry = {
-        ...currentGiftRegistry,
-        ...giftRegistry,
-      };
+      invitation.giftRegistry = { ...currentGiftRegistry, ...giftRegistry };
     }
 
     await invitation.save();
-
     return res.json(invitation);
   } catch (error) {
     console.error('Error al actualizar invitación:', error);
