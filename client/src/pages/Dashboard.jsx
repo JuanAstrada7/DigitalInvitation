@@ -1,14 +1,25 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import Swal from "sweetalert2";
 import {
   getInvitationBySlug,
   createInvitation,
+  activateInvitation,
   updateInvitation,
+  getGuestsBySlug,
+  updateGuestPayment,
+  getGuestsExportUrl,
   getAdminToken,
   setAdminToken,
   clearAdminToken,
 } from "../services/api";
+
+const PAYMENT_STATUS_OPTIONS = [
+  { value: "pending", label: "Pendiente" },
+  { value: "partial", label: "Señado" },
+  { value: "paid", label: "Pagado" },
+  { value: "exempt", label: "Sin cargo" },
+];
 
 function toDatetimeLocalValue(isoDate) {
   if (!isoDate) return "";
@@ -26,31 +37,161 @@ function formatGalleryForInput(galleryImages) {
     .join("\n");
 }
 
+function GuestPaymentRow({ guest, slug, token, onSaved }) {
+  const [status, setStatus] = useState(guest.cardPayment?.status || "pending");
+  const [amountPaid, setAmountPaid] = useState(guest.cardPayment?.amountPaid ?? 0);
+  const [notes, setNotes] = useState(guest.cardPayment?.notes || "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setStatus(guest.cardPayment?.status || "pending");
+    setAmountPaid(guest.cardPayment?.amountPaid ?? 0);
+    setNotes(guest.cardPayment?.notes || "");
+  }, [guest]);
+
+  const totalPeople = guest.attending ? 1 + (Number(guest.companions) || 0) : 0;
+
+  async function handleSavePayment() {
+    setSaving(true);
+    try {
+      await updateGuestPayment(
+        slug,
+        guest._id,
+        {
+          status,
+          amountPaid: Number(amountPaid) || 0,
+          notes,
+        },
+        token
+      );
+      Swal.fire({
+        icon: "success",
+        title: "Pago guardado",
+        text: `Actualizado para ${guest.fullName}`,
+        timer: 1200,
+        showConfirmButton: false,
+      });
+      if (onSaved) await onSaved();
+    } catch (err) {
+      Swal.fire({
+        icon: "error",
+        title: "Error al guardar pago",
+        text: err.message,
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <tr>
+      <td>
+        <div className="fw-semibold">{guest.fullName}</div>
+        {guest.dietaryRestrictions && (
+          <div className="small text-warning-emphasis">Dieta: {guest.dietaryRestrictions}</div>
+        )}
+        {guest.message && <div className="small text-muted">"{guest.message}"</div>}
+      </td>
+      <td>
+        <span className={`badge ${guest.attending ? "text-bg-success" : "text-bg-secondary"}`}>
+          {guest.attending ? "Asiste" : "No asiste"}
+        </span>
+      </td>
+      <td>
+        {guest.attending ? (
+          <>
+            {totalPeople}{" "}
+            <span className="text-muted small">({Number(guest.companions) || 0} acomp.)</span>
+          </>
+        ) : (
+          0
+        )}
+      </td>
+      <td style={{ minWidth: "135px" }}>
+        <select
+          className="form-select form-select-sm"
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+        >
+          {PAYMENT_STATUS_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td style={{ minWidth: "120px" }}>
+        <input
+          type="number"
+          min="0"
+          step="100"
+          className="form-control form-control-sm"
+          value={amountPaid}
+          onChange={(e) => setAmountPaid(e.target.value)}
+        />
+      </td>
+      <td style={{ minWidth: "150px" }}>
+        <input
+          type="text"
+          className="form-control form-control-sm"
+          placeholder="Ej. Transferencia, efectivo..."
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+        />
+      </td>
+      <td>
+        <button
+          type="button"
+          className="btn btn-sm btn-outline-dark"
+          disabled={saving}
+          onClick={handleSavePayment}
+        >
+          {saving ? "..." : "Guardar"}
+        </button>
+      </td>
+    </tr>
+  );
+}
+
 export default function Dashboard() {
-  const [selectedSlug, setSelectedSlug] = useState("prueba-boda");
+  const { slug: routeSlug } = useParams();
+  const [searchParams] = useSearchParams();
+  const queryToken = (searchParams.get("token") || "").trim();
+
+  const [selectedSlug, setSelectedSlug] = useState(routeSlug || "prueba-boda");
   const [invitation, setInvitation] = useState(null);
+  const [guestsData, setGuestsData] = useState({ summary: null, guests: [] });
   const [loadingInv, setLoadingInv] = useState(false);
+  const [exportingCsv, setExportingCsv] = useState(false);
+  const [activating, setActivating] = useState(false);
 
-  // Estado de autenticación básica por token de anfitrión
-  const [adminTokenInput, setAdminTokenInput] = useState(() => getAdminToken());
-  const [hasAdminToken, setHasAdminToken] = useState(() => Boolean(getAdminToken()));
+  // Clave en sesión (ADMIN_TOKEN o hostToken)
+  const [adminTokenInput, setAdminTokenInput] = useState(() => queryToken || getAdminToken());
+  const [hasAdminToken, setHasAdminToken] = useState(() =>
+    Boolean(queryToken || getAdminToken())
+  );
 
-  // Estado para crear nueva invitación
+  // Crear borrador (antes del pago)
   const [slug, setSlug] = useState("");
-  const [templateId, setTemplateId] = useState("Minimalist");
+  const [templateId, setTemplateId] = useState("Vintage");
+  const [eventType, setEventType] = useState("wedding");
   const [title, setTitle] = useState("");
   const [hostsText, setHostsText] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [dressCode, setDressCode] = useState("Elegante");
+  const [cardPrice, setCardPrice] = useState(0);
+  const [hostName, setHostName] = useState("");
+  const [hostWhatsapp, setHostWhatsapp] = useState("");
   const [creating, setCreating] = useState(false);
 
-  // Estado para editar invitación existente
-  const [editTemplateId, setEditTemplateId] = useState("Minimalist");
-  const [editStatus, setEditStatus] = useState("active");
+  // Editar invitación existente
+  const [editTemplateId, setEditTemplateId] = useState("Vintage");
+  const [editStatus, setEditStatus] = useState("draft");
   const [editTitle, setEditTitle] = useState("");
   const [editHostsText, setEditHostsText] = useState("");
   const [editEventDate, setEditEventDate] = useState("");
   const [editDressCode, setEditDressCode] = useState("");
+  const [editCardPrice, setEditCardPrice] = useState(0);
   const [editWelcomeMessage, setEditWelcomeMessage] = useState("");
   const [editMusicUrl, setEditMusicUrl] = useState("");
   const [editGalleryText, setEditGalleryText] = useState("");
@@ -61,17 +202,34 @@ export default function Dashboard() {
   const [editLocationsJson, setEditLocationsJson] = useState("[]");
   const [savingEdit, setSavingEdit] = useState(false);
 
+  const effectiveToken = (adminTokenInput || queryToken || getAdminToken()).trim();
+
+  useEffect(() => {
+    if (queryToken) {
+      setAdminToken(queryToken);
+      setAdminTokenInput(queryToken);
+      setHasAdminToken(true);
+    }
+  }, [queryToken]);
+
+  useEffect(() => {
+    if (routeSlug) {
+      setSelectedSlug(routeSlug);
+    }
+  }, [routeSlug]);
+
   function hydrateEditForm(inv) {
     if (!inv) return;
     const ev = inv.eventData || {};
     const gift = inv.giftRegistry || {};
 
-    setEditTemplateId(inv.templateId || "Minimalist");
-    setEditStatus(inv.status || "active");
+    setEditTemplateId(inv.templateId || "Vintage");
+    setEditStatus(inv.status || "draft");
     setEditTitle(ev.title || "");
     setEditHostsText(Array.isArray(ev.hosts) ? ev.hosts.join(" & ") : "");
     setEditEventDate(toDatetimeLocalValue(ev.eventDate));
     setEditDressCode(ev.dressCode || "");
+    setEditCardPrice(ev.cardPrice ?? 0);
     setEditWelcomeMessage(ev.welcomeMessage || "");
     setEditMusicUrl(ev.musicUrl || "");
     setEditGalleryText(formatGalleryForInput(ev.galleryImages));
@@ -91,7 +249,7 @@ export default function Dashboard() {
       Swal.fire({
         icon: "warning",
         title: "Clave vacía",
-        text: "Ingresá la clave de anfitrión (ADMIN_TOKEN) para guardar.",
+        text: "Ingresá tu token de anfitrión o ADMIN_TOKEN.",
       });
       return;
     }
@@ -100,11 +258,15 @@ export default function Dashboard() {
     setAdminTokenInput(cleanToken);
     setHasAdminToken(true);
 
+    if (invitation?.slug) {
+      loadInvitationAndGuests(invitation.slug, cleanToken);
+    }
+
     Swal.fire({
       icon: "success",
       title: "Clave guardada",
-      text: "Se enviará automáticamente al crear o editar invitaciones.",
-      timer: 1400,
+      text: "Se enviará en las gestiones del panel.",
+      timer: 1300,
       showConfirmButton: false,
     });
   }
@@ -113,27 +275,49 @@ export default function Dashboard() {
     clearAdminToken();
     setAdminTokenInput("");
     setHasAdminToken(false);
+    setGuestsData({ summary: null, guests: [] });
 
     Swal.fire({
       icon: "info",
       title: "Sesión cerrada",
-      text: "Se eliminó la clave de anfitrión de esta sesión.",
-      timer: 1400,
+      text: "Se eliminó la clave de esta sesión.",
+      timer: 1300,
       showConfirmButton: false,
     });
   }
 
-  async function loadInvitationRsvps(targetSlug) {
+  async function loadGuestsOnly(targetSlug, tokenToUse = effectiveToken) {
+    const cleanSlug = String(targetSlug || "").trim().toLowerCase();
+    if (!cleanSlug || !tokenToUse) return;
+    try {
+      const data = await getGuestsBySlug(cleanSlug, tokenToUse);
+      setGuestsData({
+        summary: data.summary || null,
+        guests: Array.isArray(data.guests) ? data.guests : [],
+      });
+    } catch {
+      setGuestsData({ summary: null, guests: [] });
+    }
+  }
+
+  async function loadInvitationAndGuests(targetSlug, tokenToUse = effectiveToken) {
     const cleanSlug = String(targetSlug || "").trim().toLowerCase();
     if (!cleanSlug) return;
 
     setLoadingInv(true);
     try {
-      const data = await getInvitationBySlug(cleanSlug);
-      setInvitation(data);
-      hydrateEditForm(data);
+      const inv = await getInvitationBySlug(cleanSlug);
+      setInvitation(inv);
+      hydrateEditForm(inv);
+
+      if (tokenToUse) {
+        await loadGuestsOnly(cleanSlug, tokenToUse);
+      } else {
+        setGuestsData({ summary: null, guests: [] });
+      }
     } catch (err) {
       setInvitation(null);
+      setGuestsData({ summary: null, guests: [] });
       Swal.fire({
         icon: "error",
         title: "Error al consultar",
@@ -145,17 +329,17 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    loadInvitationRsvps(selectedSlug);
+    loadInvitationAndGuests(selectedSlug, effectiveToken);
   }, []);
 
-  async function handleCreateInvitation(e) {
+  async function handleCreateDraft(e) {
     e.preventDefault();
 
-    if (!slug.trim() || !title.trim()) {
+    if (!slug.trim() || !title.trim() || !eventDate) {
       Swal.fire({
         icon: "warning",
         title: "Datos incompletos",
-        text: "Completá al menos el slug y el título del evento.",
+        text: "Completá slug, título y fecha del evento para generar el borrador.",
       });
       return;
     }
@@ -163,39 +347,63 @@ export default function Dashboard() {
     const payload = {
       slug: slug.trim().toLowerCase(),
       templateId,
-      status: "active",
+      hostContact: {
+        name: hostName.trim(),
+        whatsapp: hostWhatsapp.trim(),
+      },
       eventData: {
+        eventType,
         title: title.trim(),
         hosts: hostsText
           .split("&")
           .map((h) => h.trim())
           .filter(Boolean),
-        eventDate: eventDate ? new Date(eventDate).toISOString() : undefined,
+        eventDate: new Date(eventDate).toISOString(),
         dressCode: dressCode.trim() || "Elegante",
+        cardPrice: Number(cardPrice) || 0,
       },
     };
 
     setCreating(true);
     try {
-      const data = await createInvitation(payload);
+      const res = await createInvitation(payload);
+      const createdInv = res.invitation || res;
+      const generatedToken = createdInv.hostToken || "";
+
+      if (generatedToken) {
+        setAdminToken(generatedToken);
+        setAdminTokenInput(generatedToken);
+        setHasAdminToken(true);
+      }
+
+      setSelectedSlug(createdInv.slug);
+      setInvitation(createdInv);
+      hydrateEditForm(createdInv);
 
       Swal.fire({
         icon: "success",
-        title: "¡Invitación creada!",
-        text: `Ya podés verla en /${data.slug}`,
+        title: "Borrador creado (Vista previa)",
+        html: `
+          <p class="mb-2">Ya podés revisar tu invitación antes de activar y compartir por WhatsApp.</p>
+          ${
+            res.hostPanelUrl
+              ? `<p class="small text-muted mb-0">Guardá tu link de gestión: <code>${res.hostPanelUrl}</code></p>`
+              : ""
+          }
+        `,
       });
 
-      setSelectedSlug(data.slug);
-      setInvitation(data);
-      hydrateEditForm(data);
       setSlug("");
       setTitle("");
       setHostsText("");
       setEventDate("");
+      setHostName("");
+      setHostWhatsapp("");
+      await loadGuestsOnly(createdInv.slug, generatedToken || effectiveToken);
     } catch (err) {
       Swal.fire({
         icon: "error",
-        title: "No se pudo crear",
+        title: "No se pudo crear el borrador",
         text: err.message,
       });
     } finally {
@@ -203,18 +411,40 @@ export default function Dashboard() {
     }
   }
 
+  async function handleActivateInvitation() {
+    if (!invitation?.slug) return;
+    setActivating(true);
+    try {
+      const res = await activateInvitation(invitation.slug);
+      const updated = res.invitation || { ...invitation, status: "active", isPaid: true };
+      setInvitation(updated);
+      hydrateEditForm(updated);
+      Swal.fire({
+        icon: "success",
+        title: "Invitación activada",
+        text: "Ya está habilitada para compartir por WhatsApp y recibir confirmaciones.",
+      });
+    } catch (err) {
+      Swal.fire({
+        icon: "error",
+        title: "No se pudo activar",
+        text: err.message,
+      });
+    } finally {
+      setActivating(false);
+    }
+  }
+
   async function handleUpdateInvitation(e) {
     e.preventDefault();
     if (!invitation?.slug) return;
 
-    let parsedLocations = [];
+    let parsedLocations = invitation.locations || {};
     try {
-      const raw = editLocationsJson.trim() || "[]";
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) {
-        throw new Error("El campo Ubicaciones debe ser un arreglo JSON ([]).");
+      const raw = editLocationsJson.trim();
+      if (raw) {
+        parsedLocations = JSON.parse(raw);
       }
-      parsedLocations = parsed;
     } catch (err) {
       Swal.fire({
         icon: "warning",
@@ -238,8 +468,9 @@ export default function Dashboard() {
           .split("&")
           .map((h) => h.trim())
           .filter(Boolean),
-        eventDate: editEventDate ? new Date(editEventDate).toISOString() : null,
+        eventDate: editEventDate ? new Date(editEventDate).toISOString() : undefined,
         dressCode: editDressCode.trim(),
+        cardPrice: Number(editCardPrice) || 0,
         welcomeMessage: editWelcomeMessage.trim(),
         musicUrl: editMusicUrl.trim(),
         galleryImages,
@@ -255,15 +486,13 @@ export default function Dashboard() {
 
     setSavingEdit(true);
     try {
-      const data = await updateInvitation(invitation.slug, payload);
-
-      setInvitation(data);
-      hydrateEditForm(data);
-
+      const updated = await updateInvitation(invitation.slug, payload, effectiveToken);
+      setInvitation(updated);
+      hydrateEditForm(updated);
       Swal.fire({
         icon: "success",
         title: "Invitación actualizada",
-        text: `Los cambios en /${data.slug} ya están guardados.`,
+        text: `Cambios guardados en /${updated.slug}`,
       });
     } catch (err) {
       Swal.fire({
@@ -276,50 +505,97 @@ export default function Dashboard() {
     }
   }
 
-  const rsvps = Array.isArray(invitation?.rsvps) ? invitation.rsvps : [];
-  const attendingList = rsvps.filter((r) => r.attending);
-  const declinedList = rsvps.filter((r) => !r.attending);
-  const totalGuests = attendingList.reduce((acc, r) => acc + (Number(r.guestsCount) || 0), 0);
-
-  const copyPublicLink = async (targetSlug) => {
-    const url = `${window.location.origin}/${targetSlug}`;
-    try {
-      await navigator.clipboard.writeText(url);
+  async function handleDownloadCsv() {
+    if (!invitation?.slug) return;
+    if (!effectiveToken) {
       Swal.fire({
-        icon: "success",
-        title: "Link copiado",
-        text: url,
-        timer: 1500,
-        showConfirmButton: false,
+        icon: "warning",
+        title: "Token requerido",
+        text: "Cargá tu token de anfitrión o ADMIN_TOKEN para exportar la planilla.",
       });
-    } catch {
-      Swal.fire({
-        icon: "info",
-        title: "Enlace público",
-        text: url,
-      });
+      return;
     }
+
+    setExportingCsv(true);
+    try {
+      const url = getGuestsExportUrl(invitation.slug, effectiveToken);
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${effectiveToken}`,
+          "x-host-token": effectiveToken,
+        },
+      });
+      if (!res.ok) {
+        throw new Error("No se pudo descargar el archivo CSV");
+      }
+      const blob = await res.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = `invitados-${invitation.slug}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      Swal.fire({
+        icon: "error",
+        title: "Error al exportar",
+        text: err.message,
+      });
+    } finally {
+      setExportingCsv(false);
+    }
+  }
+
+  const shareOnWhatsApp = () => {
+    if (!invitation?.slug) return;
+    const publicUrl = `${window.location.origin}/${invitation.slug}`;
+    const text = `¡Te invito a ${
+      invitation.eventData?.title || "nuestro evento"
+    }! Mirá todos los detalles y confirmá tu asistencia acá: ${publicUrl}`;
+    window.open(
+      `https://wa.me/?text=${encodeURIComponent(text)}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
   };
+
+  const summary = guestsData.summary;
+  const guestsList = guestsData.guests || [];
 
   return (
     <div className="bg-light min-vh-100 py-5">
       <div className="container">
         <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
           <div>
-            <h1 className="h3 mb-1">Panel de Anfitriones</h1>
+            <h1 className="h3 mb-1">Panel de Anfitriones y Gestión</h1>
             <p className="text-muted mb-0">
-              Revisá confirmaciones RSVP, editá invitaciones y creá nuevas
+              Armá borradores, activá tras el pago, controlá confirmaciones y pagos de tarjeta
             </p>
           </div>
+
           {invitation?.slug && (
-            <div className="d-flex gap-2">
-              <button
-                type="button"
-                className="btn btn-outline-dark btn-sm"
-                onClick={() => copyPublicLink(invitation.slug)}
-              >
-                Copiar link público
-              </button>
+            <div className="d-flex flex-wrap gap-2">
+              {invitation.status === "active" && (
+                <button
+                  type="button"
+                  className="btn btn-success btn-sm"
+                  onClick={shareOnWhatsApp}
+                >
+                  Compartir por WhatsApp
+                </button>
+              )}
+              {invitation.status !== "active" && hasAdminToken && (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  disabled={activating}
+                  onClick={handleActivateInvitation}
+                >
+                  {activating ? "Activando..." : "Activar invitación (Pago acreditado)"}
+                </button>
+              )}
               <Link to={`/${invitation.slug}`} className="btn btn-dark btn-sm">
                 Ver invitación
               </Link>
@@ -327,21 +603,20 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Acceso de anfitrión (token) */}
+        {/* Acceso por token */}
         <div className="card border-0 shadow-sm p-4 mb-4">
           <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-            <h2 className="h6 mb-0">Acceso de anfitrión</h2>
+            <h2 className="h6 mb-0">Token de anfitrión / administrador</h2>
             <span
               className={`badge ${
                 hasAdminToken ? "text-bg-success" : "text-bg-warning text-dark"
               }`}
             >
-              {hasAdminToken ? "Clave cargada en sesión" : "Sin clave cargada"}
+              {hasAdminToken ? "Token activo en sesión" : "Sin token"}
             </span>
           </div>
           <p className="text-muted small mb-3">
-            Necesaria para crear o editar invitaciones. Consultar invitaciones y confirmaciones
-            sigue disponible.
+            Necesario para ver invitados, marcar pagos de tarjeta, descargar el CSV o editar.
           </p>
 
           <form className="row g-2 align-items-center" onSubmit={handleSaveAdminToken}>
@@ -349,14 +624,14 @@ export default function Dashboard() {
               <input
                 type="password"
                 className="form-control"
-                placeholder="Ingresá ADMIN_TOKEN..."
+                placeholder="Ingresá hostToken o ADMIN_TOKEN..."
                 value={adminTokenInput}
                 onChange={(e) => setAdminTokenInput(e.target.value)}
               />
             </div>
             <div className="col-sm-5 col-md-4 d-flex gap-2">
               <button type="submit" className="btn btn-dark flex-fill">
-                Guardar clave
+                Guardar token
               </button>
               {hasAdminToken && (
                 <button
@@ -377,17 +652,17 @@ export default function Dashboard() {
             className="row g-2 align-items-end"
             onSubmit={(e) => {
               e.preventDefault();
-              loadInvitationRsvps(selectedSlug);
+              loadInvitationAndGuests(selectedSlug, effectiveToken);
             }}
           >
             <div className="col-sm-8 col-md-9">
-              <label className="form-label">Slug de invitación a consultar</label>
+              <label className="form-label">Slug de invitación</label>
               <input
                 type="text"
                 className="form-control"
                 value={selectedSlug}
                 onChange={(e) => setSelectedSlug(e.target.value)}
-                placeholder="Ej. prueba-boda"
+                placeholder="Ej. boda-ana-y-lucas"
               />
             </div>
             <div className="col-sm-4 col-md-3 d-grid">
@@ -398,41 +673,82 @@ export default function Dashboard() {
           </form>
         </div>
 
-        {/* Métricas RSVP y Tabla */}
+        {/* Métricas y lista de invitados */}
         {invitation && (
           <>
-            <div className="row g-3 mb-4">
-              <div className="col-6 col-md-3">
-                <div className="card border-0 shadow-sm p-3 text-center">
-                  <div className="small text-muted">Respuestas</div>
-                  <div className="fs-3 fw-bold">{rsvps.length}</div>
-                </div>
-              </div>
-              <div className="col-6 col-md-3">
-                <div className="card border-0 shadow-sm p-3 text-center">
-                  <div className="small text-muted">Confirmaron sí</div>
-                  <div className="fs-3 fw-bold text-success">{attendingList.length}</div>
-                </div>
-              </div>
-              <div className="col-6 col-md-3">
-                <div className="card border-0 shadow-sm p-3 text-center">
-                  <div className="small text-muted">Total personas</div>
-                  <div className="fs-3 fw-bold text-primary">{totalGuests}</div>
-                </div>
-              </div>
-              <div className="col-6 col-md-3">
-                <div className="card border-0 shadow-sm p-3 text-center">
-                  <div className="small text-muted">No asisten</div>
-                  <div className="fs-3 fw-bold text-secondary">{declinedList.length}</div>
-                </div>
-              </div>
+            <div className="mb-3 d-flex flex-wrap align-items-center gap-2">
+              <span
+                className={`badge ${
+                  invitation.status === "active"
+                    ? "text-bg-success"
+                    : "text-bg-warning text-dark"
+                }`}
+              >
+                Estado: {invitation.status === "active" ? "Activa (Lista para WhatsApp)" : "Borrador (Vista previa)"}
+              </span>
+              {invitation.eventData?.cardPrice > 0 && (
+                <span className="badge text-bg-light border text-dark">
+                  Tarjeta de referencia: ${Number(invitation.eventData.cardPrice).toLocaleString("es-AR")}
+                </span>
+              )}
             </div>
 
+            {summary && (
+              <div className="row g-3 mb-4">
+                <div className="col-6 col-md-3">
+                  <div className="card border-0 shadow-sm p-3 text-center">
+                    <div className="small text-muted">Total personas</div>
+                    <div className="fs-3 fw-bold text-primary">{summary.totalPeople ?? 0}</div>
+                  </div>
+                </div>
+                <div className="col-6 col-md-3">
+                  <div className="card border-0 shadow-sm p-3 text-center">
+                    <div className="small text-muted">Tarjetas pagadas</div>
+                    <div className="fs-3 fw-bold text-success">{summary.cardsPaid ?? 0}</div>
+                  </div>
+                </div>
+                <div className="col-6 col-md-3">
+                  <div className="card border-0 shadow-sm p-3 text-center">
+                    <div className="small text-muted">Pendientes / Señadas</div>
+                    <div className="fs-3 fw-bold text-warning-emphasis">
+                      {(summary.cardsPending ?? 0) + (summary.cardsPartial ?? 0)}
+                    </div>
+                  </div>
+                </div>
+                <div className="col-6 col-md-3">
+                  <div className="card border-0 shadow-sm p-3 text-center">
+                    <div className="small text-muted">Total cobrado</div>
+                    <div className="fs-3 fw-bold text-dark">
+                      ${Number(summary.totalCollected || 0).toLocaleString("es-AR")}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="card border-0 shadow-sm p-4 mb-5">
-              <h2 className="h5 mb-3">
-                Confirmaciones — {invitation.eventData?.title || invitation.slug}
-              </h2>
-              {rsvps.length === 0 ? (
+              <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                <h2 className="h5 mb-0">
+                  Invitados y pagos de tarjeta — {invitation.eventData?.title || invitation.slug}
+                </h2>
+                {hasAdminToken && (
+                  <button
+                    type="button"
+                    className="btn btn-outline-success btn-sm"
+                    disabled={exportingCsv}
+                    onClick={handleDownloadCsv}
+                  >
+                    {exportingCsv ? "Generando CSV..." : "Descargar planilla (Excel / CSV)"}
+                  </button>
+                )}
+              </div>
+
+              {!hasAdminToken ? (
+                <p className="text-muted mb-0">
+                  Ingresá tu token arriba para ver la lista de invitados, registrar pagos de tarjeta
+                  y descargar el CSV.
+                </p>
+              ) : guestsList.length === 0 ? (
                 <p className="text-muted mb-0">Todavía no hay confirmaciones registradas.</p>
               ) : (
                 <div className="table-responsive">
@@ -442,25 +758,21 @@ export default function Dashboard() {
                         <th>Invitado</th>
                         <th>Asistencia</th>
                         <th>Personas</th>
-                        <th>Notas / Dieta</th>
+                        <th>Estado tarjeta</th>
+                        <th>Abonado ($)</th>
+                        <th>Notas</th>
+                        <th>Acción</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {rsvps.map((rsvp, idx) => (
-                        <tr key={rsvp._id || idx}>
-                          <td className="fw-semibold">{rsvp.guestName}</td>
-                          <td>
-                            <span
-                              className={`badge ${
-                                rsvp.attending ? "text-bg-success" : "text-bg-secondary"
-                              }`}
-                            >
-                              {rsvp.attending ? "Asiste" : "No asiste"}
-                            </span>
-                          </td>
-                          <td>{rsvp.guestsCount ?? 0}</td>
-                          <td className="text-muted small">{rsvp.notes || "—"}</td>
-                        </tr>
+                      {guestsList.map((g) => (
+                        <GuestPaymentRow
+                          key={g._id}
+                          guest={g}
+                          slug={invitation.slug}
+                          token={effectiveToken}
+                          onSaved={() => loadGuestsOnly(invitation.slug, effectiveToken)}
+                        />
                       ))}
                     </tbody>
                   </table>
@@ -468,40 +780,45 @@ export default function Dashboard() {
               )}
             </div>
 
-            {/* Editar invitación cargada */}
+            {/* Editar invitación */}
             <div className="card border-0 shadow-sm p-4 mb-5">
-              <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                <h2 className="h5 mb-0">Editar invitación ({invitation.slug})</h2>
-                <Link to={`/${invitation.slug}`} className="btn btn-sm btn-outline-primary">
-                  Abrir vista pública /{invitation.slug}
-                </Link>
-              </div>
-
+              <h2 className="h5 mb-3">Editar invitación ({invitation.slug})</h2>
               <form onSubmit={handleUpdateInvitation}>
                 <div className="row g-3 mb-3">
-                  <div className="col-md-6">
+                  <div className="col-md-4">
                     <label className="form-label">Plantilla</label>
                     <select
                       className="form-select"
                       value={editTemplateId}
                       onChange={(e) => setEditTemplateId(e.target.value)}
                     >
+                      <option value="Vintage">Vintage</option>
                       <option value="Minimalist">Minimalist</option>
                       <option value="Classic">Classic</option>
                       <option value="Festive">Festive</option>
-                      <option value="Vintage">Vintage</option>
                     </select>
                   </div>
-                  <div className="col-md-6">
+                  <div className="col-md-4">
                     <label className="form-label">Estado</label>
                     <select
                       className="form-select"
                       value={editStatus}
                       onChange={(e) => setEditStatus(e.target.value)}
                     >
-                      <option value="active">active</option>
                       <option value="draft">draft</option>
+                      <option value="active">active</option>
+                      <option value="expired">expired</option>
                     </select>
+                  </div>
+                  <div className="col-md-4">
+                    <label className="form-label">Valor tarjeta ($)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      className="form-control"
+                      value={editCardPrice}
+                      onChange={(e) => setEditCardPrice(e.target.value)}
+                    />
                   </div>
                 </div>
 
@@ -559,21 +876,19 @@ export default function Dashboard() {
 
                 <div className="row g-3 mb-3">
                   <div className="col-md-6">
-                    <label className="form-label">URL de música (audio)</label>
+                    <label className="form-label">URL de música</label>
                     <input
                       type="text"
                       className="form-control"
-                      placeholder="https://.../cancion.mp3"
                       value={editMusicUrl}
                       onChange={(e) => setEditMusicUrl(e.target.value)}
                     />
                   </div>
                   <div className="col-md-6">
-                    <label className="form-label">Galería (una URL de imagen por línea)</label>
+                    <label className="form-label">Galería (una URL por línea)</label>
                     <textarea
                       rows="2"
                       className="form-control"
-                      placeholder={"https://.../foto1.jpg\nhttps://.../foto2.jpg"}
                       value={editGalleryText}
                       onChange={(e) => setEditGalleryText(e.target.value)}
                     />
@@ -635,39 +950,57 @@ export default function Dashboard() {
                 </div>
 
                 <button type="submit" className="btn btn-success" disabled={savingEdit}>
-                  {savingEdit ? "Guardando cambios..." : "Guardar cambios"}
+                  {savingEdit ? "Guardando..." : "Guardar cambios"}
                 </button>
               </form>
             </div>
           </>
         )}
 
-        {/* Crear nueva invitación */}
+        {/* Crear borrador gratuito antes del pago */}
         <div className="card border-0 shadow-sm p-4">
-          <h2 className="h5 mb-3">Crear nueva invitación</h2>
-          <form onSubmit={handleCreateInvitation}>
+          <h2 className="h5 mb-1">Armar nueva invitación (Borrador gratis)</h2>
+          <p className="text-muted small mb-3">
+            Primero se crea como borrador para previsualizarla; luego se activa tras el pago para
+            compartir por WhatsApp.
+          </p>
+
+          <form onSubmit={handleCreateDraft}>
             <div className="row g-3 mb-3">
-              <div className="col-md-6">
-                <label className="form-label">Slug (URL) *</label>
+              <div className="col-md-4">
+                <label className="form-label">Enlace / Slug *</label>
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="Ej. cumple-ana-2027"
+                  placeholder="boda-camila-y-tomas"
                   value={slug}
                   onChange={(e) => setSlug(e.target.value)}
                 />
               </div>
-              <div className="col-md-6">
+              <div className="col-md-4">
                 <label className="form-label">Plantilla</label>
                 <select
                   className="form-select"
                   value={templateId}
                   onChange={(e) => setTemplateId(e.target.value)}
                 >
+                  <option value="Vintage">Vintage</option>
                   <option value="Minimalist">Minimalist</option>
                   <option value="Classic">Classic</option>
                   <option value="Festive">Festive</option>
-                  <option value="Vintage">Vintage</option>
+                </select>
+              </div>
+              <div className="col-md-4">
+                <label className="form-label">Tipo de evento</label>
+                <select
+                  className="form-select"
+                  value={eventType}
+                  onChange={(e) => setEventType(e.target.value)}
+                >
+                  <option value="wedding">Casamiento</option>
+                  <option value="quinceanera">15 años</option>
+                  <option value="communion">Comunión / Bautismo</option>
+                  <option value="birthday">Cumpleaños / Evento</option>
                 </select>
               </div>
             </div>
@@ -678,7 +1011,7 @@ export default function Dashboard() {
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="Ej. Nuestra Boda"
+                  placeholder="Casamiento Camila & Tomás"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                 />
@@ -688,7 +1021,7 @@ export default function Dashboard() {
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="Ej. Lucía & Mario"
+                  placeholder="Camila & Tomás"
                   value={hostsText}
                   onChange={(e) => setHostsText(e.target.value)}
                 />
@@ -696,8 +1029,8 @@ export default function Dashboard() {
             </div>
 
             <div className="row g-3 mb-3">
-              <div className="col-md-6">
-                <label className="form-label">Fecha del evento</label>
+              <div className="col-md-4">
+                <label className="form-label">Fecha y hora *</label>
                 <input
                   type="datetime-local"
                   className="form-control"
@@ -705,7 +1038,7 @@ export default function Dashboard() {
                   onChange={(e) => setEventDate(e.target.value)}
                 />
               </div>
-              <div className="col-md-6">
+              <div className="col-md-4">
                 <label className="form-label">Dress Code</label>
                 <input
                   type="text"
@@ -714,10 +1047,43 @@ export default function Dashboard() {
                   onChange={(e) => setDressCode(e.target.value)}
                 />
               </div>
+              <div className="col-md-4">
+                <label className="form-label">Valor tarjeta ($)</label>
+                <input
+                  type="number"
+                  min="0"
+                  className="form-control"
+                  value={cardPrice}
+                  onChange={(e) => setCardPrice(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="row g-3 mb-3">
+              <div className="col-md-6">
+                <label className="form-label">Tu nombre (anfitrión)</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Nombre de contacto"
+                  value={hostName}
+                  onChange={(e) => setHostName(e.target.value)}
+                />
+              </div>
+              <div className="col-md-6">
+                <label className="form-label">Tu WhatsApp</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Ej. 351..."
+                  value={hostWhatsapp}
+                  onChange={(e) => setHostWhatsapp(e.target.value)}
+                />
+              </div>
             </div>
 
             <button type="submit" className="btn btn-dark" disabled={creating}>
-              {creating ? "Creando..." : "Crear invitación"}
+              {creating ? "Creando borrador..." : "Crear borrador y previsualizar"}
             </button>
           </form>
         </div>

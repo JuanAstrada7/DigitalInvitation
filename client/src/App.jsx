@@ -9,6 +9,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/prueba-boda" replace />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/panel/:slug" element={<Dashboard />} />
         <Route path="/:slug" element={<InvitationView />} />
       </Routes>
     </BrowserRouter>

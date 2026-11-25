@@ -157,16 +157,45 @@ export default function InvitationView() {
 
   const eventData = invitation?.eventData || {};
   const theme = getTemplateConfig(invitation?.templateId);
+  const isDraft = invitation?.status === "draft";
+  const isActive = invitation?.status === "active";
+
+  const shareOnWhatsApp = () => {
+    const publicUrl = `${window.location.origin}/${invitation.slug}`;
+    const text = `¡Te invito a ${
+      eventData.title || "nuestro evento"
+    }! Mirá todos los detalles acá: ${publicUrl}`;
+    const waUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(waUrl, "_blank", "noopener,noreferrer");
+  };
 
   return (
     <div style={theme.pageStyle}>
       <main className="container py-5">
+        {isDraft && (
+          <div className="alert alert-warning border-warning mb-4" role="alert">
+            <strong>Vista previa en borrador:</strong> esta invitación aún no fue activada.
+            Completá el pago para habilitar el envío por WhatsApp y la confirmación de invitados.
+          </div>
+        )}
+
         <div className={theme.cardClass}>
           <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
             <span className="text-muted small">Slug: {invitation.slug}</span>
-            <span className={theme.badgeClass}>
-              Plantilla: {invitation.templateId || theme.label}
-            </span>
+            <div className="d-flex flex-wrap align-items-center gap-2">
+              <span className={theme.badgeClass}>
+                Plantilla: {invitation.templateId || theme.label}
+              </span>
+              {isActive && (
+                <button
+                  type="button"
+                  className="btn btn-success btn-sm"
+                  onClick={shareOnWhatsApp}
+                >
+                  Compartir por WhatsApp
+                </button>
+              )}
+            </div>
           </div>
 
           <h1 className="mt-3">{eventData.title}</h1>
@@ -190,7 +219,17 @@ export default function InvitationView() {
         <Gallery images={eventData.galleryImages} theme={theme} />
         <LocationMap locations={invitation.locations} theme={theme} />
         <GiftRegistrySection giftRegistry={invitation.giftRegistry} theme={theme} />
-        <RsvpForm slug={invitation.slug} apiUrl={API_URL} theme={theme} />
+
+        {isActive ? (
+          <RsvpForm slug={invitation.slug} apiUrl={API_URL} theme={theme} />
+        ) : (
+          <div className={`${theme.cardClass} mt-4`}>
+            <p className="mb-0 text-muted small">
+              El formulario de confirmación de asistencia (RSVP) se habilita automáticamente una vez
+              que la invitación esté activa.
+            </p>
+          </div>
+        )}
       </main>
     </div>
   );

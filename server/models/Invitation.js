@@ -61,10 +61,11 @@ const invitationSchema = new mongoose.Schema(
     },
     giftRegistry: {
       enabled: { type: Boolean, default: false },
-      bankName: String,
-      cbu: String,
-      alias: String,
-      holderName: String,
+      message: { type: String, default: '', trim: true },
+      bankName: { type: String, default: '', trim: true },
+      cbu: { type: String, default: '', trim: true },
+      alias: { type: String, default: '', trim: true },
+      holderName: { type: String, default: '', trim: true },
     },
   },
   {
