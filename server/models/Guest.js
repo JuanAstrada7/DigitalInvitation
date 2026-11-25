@@ -1,20 +1,64 @@
-import { Router } from 'express';
-import {
-  createGuestRsvp,
-  getGuestsByInvitationSlug,
-  updateGuestPayment,
-  exportGuestsCsv,
-} from '../controllers/guestController.js';
-import { requireHostOrAdminAuth } from '../middleware/auth.js';
+import mongoose from 'mongoose';
 
-const router = Router();
+const guestSchema = new mongoose.Schema(
+  {
+    invitationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Invitation',
+      required: true,
+      index: true,
+    },
+    fullName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    attending: {
+      type: Boolean,
+      required: true,
+    },
+    companions: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    dietaryRestrictions: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    songRequest: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    message: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    // Control privado del anfitrión (nunca visible en la invitación pública)
+    cardPayment: {
+      status: {
+        type: String,
+        enum: ['pending', 'partial', 'paid', 'exempt'],
+        default: 'pending',
+      },
+      amountPaid: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      notes: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
 
-// Confirmación pública del invitado
-router.post('/', createGuestRsvp);
-
-// Panel privado del anfitrión (requiere ?token=HOST_TOKEN o header x-host-token)
-router.get('/:slug', requireHostOrAdminAuth, getGuestsByInvitationSlug);
-router.get('/:slug/export', requireHostOrAdminAuth, exportGuestsCsv);
-router.patch('/:slug/:guestId/payment', requireHostOrAdminAuth, updateGuestPayment);
-
-export default router;
+export default mongoose.model('Guest', guestSchema);

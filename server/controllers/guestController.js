@@ -126,13 +126,14 @@ export const updateGuestPayment = async (req, res) => {
       return res.status(404).json({ message: 'Invitado no encontrado' });
     }
 
-    // Verificamos que el invitado pertenezca a la invitación autorizada en el middleware
     if (req.invitation && String(guest.invitationId) !== String(req.invitation._id)) {
       return res.status(403).json({ message: 'Este invitado no pertenece a tu evento' });
     }
 
     if (status !== undefined) guest.cardPayment.status = status;
-    if (amountPaid !== undefined) guest.cardPayment.amountPaid = Math.max(0, Number(amountPaid) || 0);
+    if (amountPaid !== undefined) {
+      guest.cardPayment.amountPaid = Math.max(0, Number(amountPaid) || 0);
+    }
     if (notes !== undefined) guest.cardPayment.notes = String(notes).trim();
 
     await guest.save();
@@ -191,7 +192,7 @@ export const exportGuestsCsv = async (req, res) => {
         escapeCsv(g.songRequest || ''),
         escapeCsv(g.message || ''),
         escapeCsv(dateStr),
-      ].join(';'); // Punto y coma para que Excel en español separe columnas automático
+      ].join(';');
     });
 
     const csvContent = '\uFEFF' + [headers.join(';'), ...rows].join('\r\n');
