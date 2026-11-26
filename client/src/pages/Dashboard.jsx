@@ -9,6 +9,7 @@ import {
   getGuestsBySlug,
   updateGuestPayment,
   getGuestsExportUrl,
+  listInvitations,
   getAdminToken,
   setAdminToken,
   clearAdminToken,
@@ -165,11 +166,15 @@ export default function Dashboard() {
   const [exportingCsv, setExportingCsv] = useState(false);
   const [activating, setActivating] = useState(false);
 
-  // Clave en sesión (ADMIN_TOKEN o hostToken)
+  // Token guardado en sesión (anfitrión o ADMIN_TOKEN) vs input del formulario
+  const [savedToken, setSavedToken] = useState(() => queryToken || getAdminToken());
   const [adminTokenInput, setAdminTokenInput] = useState(() => queryToken || getAdminToken());
-  const [hasAdminToken, setHasAdminToken] = useState(() =>
-    Boolean(queryToken || getAdminToken())
-  );
+  const hasAdminToken = Boolean(savedToken);
+
+  // Bandeja de solicitudes e invitaciones (solo visible con ADMIN_TOKEN)
+  const [ordersList, setOrdersList] = useState([]);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [loadingOrders, setLoadingOrders] = useState(false);
 
   // Crear borrador (antes del pago)
   const [slug, setSlug] = useState("");
@@ -202,13 +207,11 @@ export default function Dashboard() {
   const [editLocationsJson, setEditLocationsJson] = useState("[]");
   const [savingEdit, setSavingEdit] = useState(false);
 
-  const effectiveToken = (adminTokenInput || queryToken || getAdminToken()).trim();
-
   useEffect(() => {
     if (queryToken) {
       setAdminToken(queryToken);
+      setSavedToken(queryToken);
       setAdminTokenInput(queryToken);
-      setHasAdminToken(true);
     }
   }, [queryToken]);
 
@@ -242,6 +245,32 @@ export default function Dashboard() {
     );
   }
 
+  async function fetchAdminOrders(tokenToUse = savedToken, filter = statusFilter) {
+    if (!tokenToUse) {
+      setOrdersList([]);
+      return;
+    }
+
+    setLoadingOrders(true);
+    try {
+      const queryStatus = filter === "all" ? "" : filter;
+      const list = await listInvitations(queryStatus, tokenToUse);
+      setOrdersList(Array.isArray(list) ? list : []);
+    } catch {
+      setOrdersList([]);
+    } finally {
+      setLoadingOrders(false);
+    }
+  }
+
+  useEffect(() => {
+    if (savedToken) {
+      fetchAdminOrders(savedToken, statusFilter);
+    } else {
+      setOrdersList([]);
+    }
+  }, [savedToken, statusFilter]);
+
   function handleSaveAdminToken(e) {
     e.preventDefault();
     const cleanToken = adminTokenInput.trim();
@@ -255,8 +284,8 @@ export default function Dashboard() {
     }
 
     setAdminToken(cleanToken);
+    setSavedToken(cleanToken);
     setAdminTokenInput(cleanToken);
-    setHasAdminToken(true);
 
     if (invitation?.slug) {
       loadInvitationAndGuests(invitation.slug, cleanToken);
@@ -273,8 +302,9 @@ export default function Dashboard() {
 
   function handleClearAdminToken() {
     clearAdminToken();
+    setSavedToken("");
     setAdminTokenInput("");
-    setHasAdminToken(false);
+    setOrdersList([]);
     setGuestsData({ summary: null, guests: [] });
 
     Swal.fire({
@@ -286,7 +316,7 @@ export default function Dashboard() {
     });
   }
 
-  async function loadGuestsOnly(targetSlug, tokenToUse = effectiveToken) {
+  async function loadGuestsOnly(targetSlug, tokenToUse = savedToken) {
     const cleanSlug = String(targetSlug || "").trim().toLowerCase();
     if (!cleanSlug || !tokenToUse) return;
     try {
@@ -300,7 +330,7 @@ export default function Dashboard() {
     }
   }
 
-  async function loadInvitationAndGuests(targetSlug, tokenToUse = effectiveToken) {
+  async function loadInvitationAndGuests(targetSlug, tokenToUse = savedToken) {
     const cleanSlug = String(targetSlug || "").trim().toLowerCase();
     if (!cleanSlug) return;
 
@@ -329,7 +359,7 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    loadInvitationAndGuests(selectedSlug, effectiveToken);
+    loadInvitationAndGuests(selectedSlug, savedToken);
   }, []);
 
   async function handleCreateDraft(e) {
@@ -370,10 +400,11 @@ export default function Dashboard() {
       const createdInv = res.invitation || res;
       const generatedToken = createdInv.hostToken || "";
 
-      if (generatedToken) {
+      const activeTokenForSession = savedToken || generatedToken;
+      if (generatedToken && !savedToken) {
         setAdminToken(generatedToken);
+        setSavedToken(generatedToken);
         setAdminTokenInput(generatedToken);
-        setHasAdminToken(true);
       }
 
       setSelectedSlug(createdInv.slug);
@@ -399,7 +430,8 @@ export default function Dashboard() {
       setEventDate("");
       setHostName("");
       setHostWhatsapp("");
-      await loadGuestsOnly(createdInv.slug, generatedToken || effectiveToken);
+      await loadGuestsOnly(createdInv.slug, activeTokenForSession);
+      await fetchAdminOrders(activeTokenForSession, statusFilter);
     } catch (err) {
       Swal.fire({
         icon: "error",
@@ -419,6 +451,7 @@ export default function Dashboard() {
       const updated = res.invitation || { ...invitation, status: "active", isPaid: true };
       setInvitation(updated);
       hydrateEditForm(updated);
+      await fetchAdminOrders(savedToken, statusFilter);
       Swal.fire({
         icon: "success",
         title: "Invitación activada",
@@ -486,9 +519,10 @@ export default function Dashboard() {
 
     setSavingEdit(true);
     try {
-      const updated = await updateInvitation(invitation.slug, payload, effectiveToken);
+      const updated = await updateInvitation(invitation.slug, payload, savedToken);
       setInvitation(updated);
       hydrateEditForm(updated);
+      await fetchAdminOrders(savedToken, statusFilter);
       Swal.fire({
         icon: "success",
         title: "Invitación actualizada",
@@ -507,7 +541,7 @@ export default function Dashboard() {
 
   async function handleDownloadCsv() {
     if (!invitation?.slug) return;
-    if (!effectiveToken) {
+    if (!savedToken) {
       Swal.fire({
         icon: "warning",
         title: "Token requerido",
@@ -518,11 +552,11 @@ export default function Dashboard() {
 
     setExportingCsv(true);
     try {
-      const url = getGuestsExportUrl(invitation.slug, effectiveToken);
+      const url = getGuestsExportUrl(invitation.slug, savedToken);
       const res = await fetch(url, {
         headers: {
-          Authorization: `Bearer ${effectiveToken}`,
-          "x-host-token": effectiveToken,
+          Authorization: `Bearer ${savedToken}`,
+          "x-host-token": savedToken,
         },
       });
       if (!res.ok) {
@@ -646,13 +680,121 @@ export default function Dashboard() {
           </form>
         </div>
 
+        {/* Bandeja de solicitudes e invitaciones (Admin) */}
+        {ordersList.length > 0 && (
+          <div className="card border-0 shadow-sm p-4 mb-4">
+            <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+              <div>
+                <h2 className="h6 mb-0">
+                  Solicitudes e invitaciones ({ordersList.length})
+                </h2>
+                {loadingOrders && <small className="text-muted">Actualizando...</small>}
+              </div>
+
+              <div className="btn-group btn-group-sm">
+                <button
+                  type="button"
+                  className={`btn ${statusFilter === "all" ? "btn-dark" : "btn-outline-dark"}`}
+                  onClick={() => setStatusFilter("all")}
+                >
+                  Todas
+                </button>
+                <button
+                  type="button"
+                  className={`btn ${statusFilter === "draft" ? "btn-dark" : "btn-outline-dark"}`}
+                  onClick={() => setStatusFilter("draft")}
+                >
+                  Borradores
+                </button>
+                <button
+                  type="button"
+                  className={`btn ${statusFilter === "active" ? "btn-dark" : "btn-outline-dark"}`}
+                  onClick={() => setStatusFilter("active")}
+                >
+                  Activas
+                </button>
+              </div>
+            </div>
+
+            <div className="mb-3">
+              <select
+                className="form-select form-select-sm"
+                value={selectedSlug || ""}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setSelectedSlug(e.target.value);
+                    loadInvitationAndGuests(e.target.value, savedToken);
+                  }
+                }}
+              >
+                <option value="">-- Seleccionar solicitud o invitación --</option>
+                {ordersList.map((item) => (
+                  <option key={item._id || item.slug} value={item.slug}>
+                    [{item.status === "active" ? "ACTIVA" : "BORRADOR"}]{" "}
+                    {item.eventData?.title || item.slug} — /{item.slug}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="table-responsive">
+              <table className="table table-sm align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Evento</th>
+                    <th>Cliente</th>
+                    <th>WhatsApp</th>
+                    <th>Estado</th>
+                    <th className="text-end">Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ordersList.map((item) => (
+                    <tr key={item._id || item.slug}>
+                      <td>
+                        <div className="fw-semibold">{item.eventData?.title || item.slug}</div>
+                        <small className="text-muted">/{item.slug}</small>
+                      </td>
+                      <td>{item.hostContact?.name || "—"}</td>
+                      <td>{item.hostContact?.whatsapp || "—"}</td>
+                      <td>
+                        <span
+                          className={`badge ${
+                            item.status === "active"
+                              ? "text-bg-success"
+                              : "text-bg-warning text-dark"
+                          }`}
+                        >
+                          {item.status === "active" ? "Activa" : "Borrador"}
+                        </span>
+                      </td>
+                      <td className="text-end">
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-primary"
+                          onClick={() => {
+                            setSelectedSlug(item.slug);
+                            loadInvitationAndGuests(item.slug, savedToken);
+                          }}
+                        >
+                          Gestionar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {/* Buscador por slug */}
         <div className="card border-0 shadow-sm p-4 mb-4">
           <form
             className="row g-2 align-items-end"
             onSubmit={(e) => {
               e.preventDefault();
-              loadInvitationAndGuests(selectedSlug, effectiveToken);
+              loadInvitationAndGuests(selectedSlug, savedToken);
             }}
           >
             <div className="col-sm-8 col-md-9">
@@ -684,11 +826,15 @@ export default function Dashboard() {
                     : "text-bg-warning text-dark"
                 }`}
               >
-                Estado: {invitation.status === "active" ? "Activa (Lista para WhatsApp)" : "Borrador (Vista previa)"}
+                Estado:{" "}
+                {invitation.status === "active"
+                  ? "Activa (Lista para WhatsApp)"
+                  : "Borrador (Vista previa)"}
               </span>
               {invitation.eventData?.cardPrice > 0 && (
                 <span className="badge text-bg-light border text-dark">
-                  Tarjeta de referencia: ${Number(invitation.eventData.cardPrice).toLocaleString("es-AR")}
+                  Tarjeta de referencia: $
+                  {Number(invitation.eventData.cardPrice).toLocaleString("es-AR")}
                 </span>
               )}
             </div>
@@ -770,8 +916,8 @@ export default function Dashboard() {
                           key={g._id}
                           guest={g}
                           slug={invitation.slug}
-                          token={effectiveToken}
-                          onSaved={() => loadGuestsOnly(invitation.slug, effectiveToken)}
+                          token={savedToken}
+                          onSaved={() => loadGuestsOnly(invitation.slug, savedToken)}
                         />
                       ))}
                     </tbody>
@@ -942,14 +1088,14 @@ export default function Dashboard() {
                 <div className="mb-3">
                   <label className="form-label">Ubicaciones (JSON)</label>
                   <textarea
-                    rows="3"
+                    rows="4"
                     className="form-control font-monospace small"
                     value={editLocationsJson}
                     onChange={(e) => setEditLocationsJson(e.target.value)}
                   />
                 </div>
 
-                <button type="submit" className="btn btn-success" disabled={savingEdit}>
+                <button type="submit" className="btn btn-dark" disabled={savingEdit}>
                   {savingEdit ? "Guardando..." : "Guardar cambios"}
                 </button>
               </form>
@@ -957,22 +1103,17 @@ export default function Dashboard() {
           </>
         )}
 
-        {/* Crear borrador gratuito antes del pago */}
+        {/* Crear borrador */}
         <div className="card border-0 shadow-sm p-4">
-          <h2 className="h5 mb-1">Armar nueva invitación (Borrador gratis)</h2>
-          <p className="text-muted small mb-3">
-            Primero se crea como borrador para previsualizarla; luego se activa tras el pago para
-            compartir por WhatsApp.
-          </p>
-
+          <h2 className="h5 mb-3">Crear nuevo borrador (antes del pago)</h2>
           <form onSubmit={handleCreateDraft}>
             <div className="row g-3 mb-3">
               <div className="col-md-4">
-                <label className="form-label">Enlace / Slug *</label>
+                <label className="form-label">Slug *</label>
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="boda-camila-y-tomas"
+                  placeholder="Ej. boda-camila-y-tomas"
                   value={slug}
                   onChange={(e) => setSlug(e.target.value)}
                 />
@@ -998,9 +1139,9 @@ export default function Dashboard() {
                   onChange={(e) => setEventType(e.target.value)}
                 >
                   <option value="wedding">Casamiento</option>
-                  <option value="quinceanera">15 años</option>
+                  <option value="quinceanera">15 Años</option>
                   <option value="communion">Comunión / Bautismo</option>
-                  <option value="birthday">Cumpleaños / Evento</option>
+                  <option value="birthday">Cumpleaños / Otro</option>
                 </select>
               </div>
             </div>
@@ -1011,7 +1152,7 @@ export default function Dashboard() {
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="Casamiento Camila & Tomás"
+                  placeholder="Ej. Boda Camila & Tomás"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                 />
@@ -1021,7 +1162,7 @@ export default function Dashboard() {
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="Camila & Tomás"
+                  placeholder="Ej. Camila & Tomás"
                   value={hostsText}
                   onChange={(e) => setHostsText(e.target.value)}
                 />
@@ -1029,7 +1170,7 @@ export default function Dashboard() {
             </div>
 
             <div className="row g-3 mb-3">
-              <div className="col-md-4">
+              <div className="col-md-6">
                 <label className="form-label">Fecha y hora *</label>
                 <input
                   type="datetime-local"
@@ -1038,7 +1179,7 @@ export default function Dashboard() {
                   onChange={(e) => setEventDate(e.target.value)}
                 />
               </div>
-              <div className="col-md-4">
+              <div className="col-md-3">
                 <label className="form-label">Dress Code</label>
                 <input
                   type="text"
@@ -1047,7 +1188,7 @@ export default function Dashboard() {
                   onChange={(e) => setDressCode(e.target.value)}
                 />
               </div>
-              <div className="col-md-4">
+              <div className="col-md-3">
                 <label className="form-label">Valor tarjeta ($)</label>
                 <input
                   type="number"
@@ -1059,23 +1200,23 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="row g-3 mb-3">
+            <div className="row g-3 mb-4">
               <div className="col-md-6">
-                <label className="form-label">Tu nombre (anfitrión)</label>
+                <label className="form-label">Nombre de contacto</label>
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="Nombre de contacto"
+                  placeholder="Ej. Camila"
                   value={hostName}
                   onChange={(e) => setHostName(e.target.value)}
                 />
               </div>
               <div className="col-md-6">
-                <label className="form-label">Tu WhatsApp</label>
+                <label className="form-label">WhatsApp de contacto</label>
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="Ej. 351..."
+                  placeholder="Ej. 5493510000000"
                   value={hostWhatsapp}
                   onChange={(e) => setHostWhatsapp(e.target.value)}
                 />
@@ -1083,7 +1224,7 @@ export default function Dashboard() {
             </div>
 
             <button type="submit" className="btn btn-dark" disabled={creating}>
-              {creating ? "Creando borrador..." : "Crear borrador y previsualizar"}
+              {creating ? "Creando borrador..." : "Crear borrador y preview"}
             </button>
           </form>
         </div>

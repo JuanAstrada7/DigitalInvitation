@@ -132,3 +132,15 @@ export function getGuestsExportUrl(slug, token = "") {
 }
 
 export { API_URL };
+
+// Protegido: lista solicitudes e invitaciones (requiere ADMIN_TOKEN)
+export function listInvitations(status = "", adminToken = "") {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  const activeToken = (adminToken || getAdminToken()).trim();
+
+  return request(`/api/invitations${query}`, {
+    requiresAuth: true,
+    hostToken: activeToken,
+    headers: activeToken ? { "x-admin-token": activeToken } : {},
+  });
+}

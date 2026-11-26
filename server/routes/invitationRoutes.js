@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  listInvitations,
   getInvitationBySlug,
   createInvitation,
   activateInvitation,
@@ -10,6 +11,7 @@ import { requireAdminAuth, requireHostOrAdminAuth } from '../middleware/auth.js'
 const router = Router();
 
 // Rutas públicas
+router.get('/', requireAdminAuth, listInvitations);
 router.get('/:slug', getInvitationBySlug);
 router.post('/', createInvitation); // Crea el borrador antes del pago
 

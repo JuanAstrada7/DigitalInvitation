@@ -132,3 +132,26 @@ export const updateInvitation = async (req, res) => {
     return res.status(500).json({ message: 'Error interno al actualizar la invitación' });
   }
 };
+
+// Listar todas las invitaciones y solicitudes (solo Admin)
+export const listInvitations = async (req, res) => {
+  try {
+    const { status } = req.query;
+    const filter = {};
+    if (status && ['draft', 'active', 'expired'].includes(status)) {
+      filter.status = status;
+    }
+
+    const invitations = await Invitation.find(filter)
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.json(invitations);
+  } catch (error) {
+    console.error('Error al listar invitaciones:', error);
+    return res.status(500).json({
+      message: 'Error al listar las invitaciones',
+      error: error.message,
+    });
+  }
+};
