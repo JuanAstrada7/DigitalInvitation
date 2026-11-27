@@ -4,6 +4,7 @@ import Catalog from "./pages/Catalog";
 import RequestForm from "./pages/RequestForm";
 import InvitationView from "./pages/InvitationView";
 import Dashboard from "./pages/Dashboard";
+import HostPanel from "./pages/HostPanel";
 
 export default function App() {
   return (
@@ -12,7 +13,7 @@ export default function App() {
         <Route path="/" element={<Catalog />} />
         <Route path="/solicitar" element={<RequestForm />} />
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/panel/:slug" element={<Dashboard />} />
+        <Route path="/panel/:slug" element={<HostPanel />} />
         <Route path="/:slug" element={<InvitationView />} />
       </Routes>
     </BrowserRouter>
