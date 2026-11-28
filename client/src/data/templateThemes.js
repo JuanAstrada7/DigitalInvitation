@@ -2,6 +2,7 @@ export const TEMPLATES = {
   minimalist: {
     id: "Minimalist",
     label: "Minimalist",
+    mutedClass: "text-muted",
     pageStyle: {
       backgroundColor: "#faf9f6",
       color: "#1f2933",
@@ -14,6 +15,7 @@ export const TEMPLATES = {
   classic: {
     id: "Classic",
     label: "Classic",
+    mutedClass: "text-muted",
     pageStyle: {
       backgroundColor: "#f4efe6",
       color: "#2c241b",
@@ -26,6 +28,7 @@ export const TEMPLATES = {
   festive: {
     id: "Festive",
     label: "Festive",
+    mutedClass: "text-muted",
     pageStyle: {
       backgroundColor: "#fff5f7",
       color: "#2b192e",
@@ -38,6 +41,7 @@ export const TEMPLATES = {
   vintage: {
     id: "Vintage",
     label: "Vintage",
+    mutedClass: "text-muted",
     pageStyle: {
       backgroundColor: "#efe7d6",
       color: "#3b2d1f",
@@ -53,6 +57,7 @@ export const TEMPLATES = {
   botanical: {
     id: "Botanical",
     label: "Botanical",
+    mutedClass: "text-muted",
     pageStyle: {
       backgroundColor: "#eff5f0",
       color: "#1f3526",
@@ -67,6 +72,7 @@ export const TEMPLATES = {
   glam: {
     id: "Glam",
     label: "Glam",
+    mutedClass: "text-white-50",
     pageStyle: {
       backgroundColor: "#18141c",
       color: "#f8f4fb",
@@ -80,6 +86,7 @@ export const TEMPLATES = {
   celestial: {
     id: "Celestial",
     label: "Celestial",
+    mutedClass: "text-muted",
     pageStyle: {
       backgroundColor: "#f2f7fc",
       color: "#1e3246",
@@ -94,6 +101,7 @@ export const TEMPLATES = {
   party: {
     id: "Party",
     label: "Party",
+    mutedClass: "text-muted",
     pageStyle: {
       backgroundColor: "#fff8eb",
       color: "#291d0e",

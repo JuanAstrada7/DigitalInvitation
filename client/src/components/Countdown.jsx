@@ -30,6 +30,8 @@ export default function Countdown({ eventDate, theme }) {
 
   if (!timeLeft) return null;
 
+  const mutedClass = theme?.mutedClass || "text-muted";
+
   const items = [
     { label: "Días", value: timeLeft.days },
     { label: "Horas", value: timeLeft.hours },
@@ -47,7 +49,7 @@ export default function Countdown({ eventDate, theme }) {
               <div className="fs-3 fw-bold">
                 {String(item.value).padStart(2, "0")}
               </div>
-              <div className="small text-muted">{item.label}</div>
+              <div className={`small ${mutedClass}`}>{item.label}</div>
             </div>
           </div>
         ))}

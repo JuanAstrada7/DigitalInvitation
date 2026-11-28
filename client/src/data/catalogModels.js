@@ -18,7 +18,7 @@ export const CATALOG_MODELS = [
     categoryLabel: "Casamiento",
     name: "Vintage Romance",
     tagline: "Tipografía clásica, tonos cálidos y estilo editorial romántico.",
-    demoSlug: "prueba-boda",
+    demoSlug: "demo-vintage-boda",
     accentColor: "#8c6d46",
     bgPreview: "#efe7d6",
     features: [
@@ -36,7 +36,7 @@ export const CATALOG_MODELS = [
     categoryLabel: "Casamiento",
     name: "Minimalist Blanco",
     tagline: "Diseño limpio, moderno y elegante con foco en las fotos.",
-    demoSlug: "prueba-boda",
+    demoSlug: "demo-minimalist-boda",
     accentColor: "#1f2933",
     bgPreview: "#faf9f6",
     features: [
@@ -54,7 +54,7 @@ export const CATALOG_MODELS = [
     categoryLabel: "Casamiento",
     name: "Jardín Botánico",
     tagline: "Tonos verdes suaves y aire natural para bodas al aire libre.",
-    demoSlug: "prueba-boda",
+    demoSlug: "demo-botanical-boda",
     accentColor: "#1f5132",
     bgPreview: "#eff5f0",
     features: [
@@ -74,7 +74,7 @@ export const CATALOG_MODELS = [
     categoryLabel: "15 Años",
     name: "Festive Rose",
     tagline: "Vibrante y moderno, ideal para noches de 15 y fiestas.",
-    demoSlug: "prueba-boda",
+    demoSlug: "demo-festive-quince",
     accentColor: "#be185d",
     bgPreview: "#fff5f7",
     features: [
@@ -92,7 +92,7 @@ export const CATALOG_MODELS = [
     categoryLabel: "15 Años",
     name: "Glam Noche",
     tagline: "Estilo nocturno elegante con acentos dorados para una gran fiesta.",
-    demoSlug: "prueba-boda",
+    demoSlug: "demo-glam-quince",
     accentColor: "#d97706",
     bgPreview: "#18141c",
     features: [
@@ -112,7 +112,7 @@ export const CATALOG_MODELS = [
     categoryLabel: "Comunión / Bautismo",
     name: "Classic Arena",
     tagline: "Suave, cálido y delicado para celebraciones familiares.",
-    demoSlug: "prueba-boda",
+    demoSlug: "demo-classic-comunion",
     accentColor: "#5c4d3c",
     bgPreview: "#f4efe6",
     features: [
@@ -129,7 +129,7 @@ export const CATALOG_MODELS = [
     categoryLabel: "Comunión / Bautismo",
     name: "Celestial Azul",
     tagline: "Sereno y luminoso en tonos celestes para bautismos y comuniones.",
-    demoSlug: "prueba-boda",
+    demoSlug: "demo-celestial-comunion",
     accentColor: "#1d4ed8",
     bgPreview: "#f2f7fc",
     features: [
@@ -148,7 +148,7 @@ export const CATALOG_MODELS = [
     categoryLabel: "Cumpleaños",
     name: "Party Gold",
     tagline: "Fresco, ágil y festivo para cumpleaños de todas las edades.",
-    demoSlug: "prueba-boda",
+    demoSlug: "demo-party-cumple",
     accentColor: "#291d0e",
     bgPreview: "#fff8eb",
     features: [
@@ -165,7 +165,7 @@ export const CATALOG_MODELS = [
     categoryLabel: "Cumpleaños",
     name: "Minimalist Clean",
     tagline: "Simple y directo, ideal para encuentros o cenas especiales.",
-    demoSlug: "prueba-boda",
+    demoSlug: "demo-minimalist-cumple",
     accentColor: "#1f2933",
     bgPreview: "#faf9f6",
     features: [

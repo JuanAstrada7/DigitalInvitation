@@ -11,6 +11,14 @@ export default function RsvpForm({ slug, theme }) {
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  function handleAttendingChange(e) {
+    const nextValue = e.target.value;
+    setAttending(nextValue);
+    if (nextValue === "yes" && (Number(totalPeople) || 0) < 1) {
+      setTotalPeople(1);
+    }
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
 
@@ -91,7 +99,7 @@ export default function RsvpForm({ slug, theme }) {
             <select
               className="form-select"
               value={attending}
-              onChange={(e) => setAttending(e.target.value)}
+              onChange={handleAttendingChange}
             >
               <option value="yes">Sí, ahí estaré</option>
               <option value="no">No podré asistir</option>
@@ -106,7 +114,7 @@ export default function RsvpForm({ slug, theme }) {
               max="10"
               className="form-control"
               disabled={attending !== "yes"}
-              value={attending === "yes" ? totalPeople : 0}
+              value={attending === "yes" ? Math.max(1, Number(totalPeople) || 1) : 0}
               onChange={(e) => setTotalPeople(e.target.value)}
             />
           </div>

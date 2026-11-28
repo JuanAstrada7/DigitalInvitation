@@ -7,10 +7,12 @@ import MusicPlayer from "../components/MusicPlayer";
 import RsvpForm from "../components/RsvpForm";
 import LocationMap from "../components/LocationMap";
 import { getTemplateConfig } from "../data/templateThemes";
-import { getInvitationBySlug, API_URL } from "../services/api";
+import { getInvitationBySlug } from "../services/api";
 
 function GiftRegistrySection({ giftRegistry, theme }) {
   if (!giftRegistry || !giftRegistry.enabled) return null;
+
+  const mutedClass = theme?.mutedClass || "text-muted";
 
   const copyValue = async (value, label) => {
     if (!value) return;
@@ -36,7 +38,7 @@ function GiftRegistrySection({ giftRegistry, theme }) {
     <div className={`${theme.cardClass} mt-4`}>
       <h2 className="h5 mb-2">Mesa de regalos</h2>
       {giftRegistry.message && (
-        <p className="text-muted small mb-3">{giftRegistry.message}</p>
+        <p className={`${mutedClass} small mb-3`}>{giftRegistry.message}</p>
       )}
       <div className="d-flex flex-wrap gap-2">
         {giftRegistry.alias && (
@@ -119,6 +121,7 @@ export default function InvitationView() {
 
   const eventData = invitation?.eventData || {};
   const theme = getTemplateConfig(invitation?.templateId);
+  const mutedClass = theme?.mutedClass || "text-muted";
   const isDraft = invitation?.status === "draft";
   const isActive = invitation?.status === "active";
 
@@ -144,7 +147,7 @@ export default function InvitationView() {
 
         <div className={theme.cardClass}>
           <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <span className="text-muted small">Slug: {invitation.slug}</span>
+            <span className={`${mutedClass} small`}>Slug: {invitation.slug}</span>
             <div className="d-flex flex-wrap align-items-center gap-2">
               <span className={theme.badgeClass}>
                 Plantilla: {invitation.templateId || theme.label}
@@ -166,7 +169,7 @@ export default function InvitationView() {
             {Array.isArray(eventData.hosts) ? eventData.hosts.join(" & ") : ""}
           </p>
           {eventData.welcomeMessage && (
-            <p className="text-muted">{eventData.welcomeMessage}</p>
+            <p className={mutedClass}>{eventData.welcomeMessage}</p>
           )}
           <p className="mb-1">
             <strong>Fecha:</strong>{" "}
@@ -182,14 +185,19 @@ export default function InvitationView() {
         <Countdown eventDate={eventData.eventDate} theme={theme} />
         <MusicPlayer musicUrl={eventData.musicUrl} theme={theme} />
         <Gallery images={eventData.galleryImages} theme={theme} />
-        <LocationMap locations={invitation.locations} theme={theme} />
+        <LocationMap
+          locations={invitation.locations}
+          theme={theme}
+          eventDate={eventData.eventDate}
+          eventTitle={eventData.title}
+        />
         <GiftRegistrySection giftRegistry={invitation.giftRegistry} theme={theme} />
 
         {isActive ? (
-          <RsvpForm slug={invitation.slug} apiUrl={API_URL} theme={theme} />
+          <RsvpForm slug={invitation.slug} theme={theme} />
         ) : (
           <div className={`${theme.cardClass} mt-4`}>
-            <p className="mb-0 text-muted small">
+            <p className={`mb-0 ${mutedClass} small`}>
               El formulario de confirmación de asistencia (RSVP) se habilita
               automáticamente una vez que la invitación esté activa.
             </p>

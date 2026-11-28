@@ -21,6 +21,8 @@ export default function Gallery({ images, theme }) {
   const photos = normalizeImages(images);
   if (photos.length === 0) return null;
 
+  const mutedClass = theme?.mutedClass || "text-muted";
+
   return (
     <div className={`${theme.cardClass} mt-4`}>
       <h2 className="h5 mb-3">Galería</h2>
@@ -36,7 +38,9 @@ export default function Gallery({ images, theme }) {
                 loading="lazy"
               />
               {photo.caption && (
-                <figcaption className="small text-muted mt-2">{photo.caption}</figcaption>
+                <figcaption className={`small ${mutedClass} mt-2`}>
+                  {photo.caption}
+                </figcaption>
               )}
             </figure>
           </div>
