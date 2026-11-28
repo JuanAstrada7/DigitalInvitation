@@ -10,6 +10,7 @@ export const EVENT_CATEGORIES = [
 ];
 
 export const CATALOG_MODELS = [
+  // --- CASAMIENTOS ---
   {
     id: "vintage-boda",
     templateId: "Vintage",
@@ -47,6 +48,26 @@ export const CATALOG_MODELS = [
     ],
   },
   {
+    id: "botanical-boda",
+    templateId: "Botanical",
+    eventType: "wedding",
+    categoryLabel: "Casamiento",
+    name: "Jardín Botánico",
+    tagline: "Tonos verdes suaves y aire natural para bodas al aire libre.",
+    demoSlug: "prueba-boda",
+    accentColor: "#1f5132",
+    bgPreview: "#eff5f0",
+    features: [
+      "Cuenta regresiva",
+      "Galería de fotos",
+      "Mapa ceremonia y fiesta",
+      "Mesa de regalos",
+      "RSVP",
+    ],
+  },
+
+  // --- 15 AÑOS ---
+  {
     id: "festive-quince",
     templateId: "Festive",
     eventType: "quinceanera",
@@ -65,6 +86,26 @@ export const CATALOG_MODELS = [
     ],
   },
   {
+    id: "glam-quince",
+    templateId: "Glam",
+    eventType: "quinceanera",
+    categoryLabel: "15 Años",
+    name: "Glam Noche",
+    tagline: "Estilo nocturno elegante con acentos dorados para una gran fiesta.",
+    demoSlug: "prueba-boda",
+    accentColor: "#d97706",
+    bgPreview: "#18141c",
+    features: [
+      "Cuenta regresiva",
+      "Música de fondo",
+      "Galería",
+      "Mapa del salón",
+      "RSVP",
+    ],
+  },
+
+  // --- COMUNIÓN Y BAUTISMO ---
+  {
     id: "classic-comunion",
     templateId: "Classic",
     eventType: "communion",
@@ -79,6 +120,58 @@ export const CATALOG_MODELS = [
       "Confirmación familiar",
       "Restricciones alimentarias",
       "Mapa",
+    ],
+  },
+  {
+    id: "celestial-comunion",
+    templateId: "Celestial",
+    eventType: "communion",
+    categoryLabel: "Comunión / Bautismo",
+    name: "Celestial Azul",
+    tagline: "Sereno y luminoso en tonos celestes para bautismos y comuniones.",
+    demoSlug: "prueba-boda",
+    accentColor: "#1d4ed8",
+    bgPreview: "#f2f7fc",
+    features: [
+      "Iglesia y festejo",
+      "Confirmación familiar",
+      "Galería",
+      "Mapa",
+    ],
+  },
+
+  // --- CUMPLEAÑOS ---
+  {
+    id: "party-cumple",
+    templateId: "Party",
+    eventType: "birthday",
+    categoryLabel: "Cumpleaños",
+    name: "Party Gold",
+    tagline: "Fresco, ágil y festivo para cumpleaños de todas las edades.",
+    demoSlug: "prueba-boda",
+    accentColor: "#291d0e",
+    bgPreview: "#fff8eb",
+    features: [
+      "Cuenta regresiva",
+      "Sugerencia de temas",
+      "Ubicación",
+      "RSVP",
+    ],
+  },
+  {
+    id: "minimalist-cumple",
+    templateId: "Minimalist",
+    eventType: "birthday",
+    categoryLabel: "Cumpleaños",
+    name: "Minimalist Clean",
+    tagline: "Simple y directo, ideal para encuentros o cenas especiales.",
+    demoSlug: "prueba-boda",
+    accentColor: "#1f2933",
+    bgPreview: "#faf9f6",
+    features: [
+      "Ubicación GPS",
+      "Galería",
+      "Confirmación rápida",
     ],
   },
 ];

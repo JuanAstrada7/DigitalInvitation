@@ -35,6 +35,13 @@ function formatGalleryForInput(galleryImages) {
     .join("\n");
 }
 
+function normalizeLocationsForEditor(locations) {
+  if (!locations || typeof locations !== "object") {
+    return { ceremony: {}, party: {} };
+  }
+  return locations;
+}
+
 function GuestPaymentRow({ guest, slug, token, onSaved }) {
   const [status, setStatus] = useState(guest.cardPayment?.status || "pending");
   const [amountPaid, setAmountPaid] = useState(guest.cardPayment?.amountPaid ?? 0);
@@ -188,7 +195,9 @@ export default function HostPanel() {
   const [editGiftMessage, setEditGiftMessage] = useState("");
   const [editGiftAlias, setEditGiftAlias] = useState("");
   const [editGiftCbu, setEditGiftCbu] = useState("");
-  const [editLocationsJson, setEditLocationsJson] = useState("[]");
+  const [editLocationsJson, setEditLocationsJson] = useState(
+    JSON.stringify({ ceremony: {}, party: {} }, null, 2)
+  );
   const [savingEdit, setSavingEdit] = useState(false);
 
   function hydrateEditForm(inv) {
@@ -209,7 +218,7 @@ export default function HostPanel() {
     setEditGiftAlias(gift.alias || "");
     setEditGiftCbu(gift.cbu || "");
     setEditLocationsJson(
-      JSON.stringify(Array.isArray(inv.locations) ? inv.locations : [], null, 2)
+      JSON.stringify(normalizeLocationsForEditor(inv.locations), null, 2)
     );
   }
 
@@ -288,11 +297,17 @@ export default function HostPanel() {
     e.preventDefault();
     if (!slug) return;
 
-    let parsedLocations = invitation?.locations || [];
+    let parsedLocations = normalizeLocationsForEditor(invitation?.locations);
     try {
       const raw = editLocationsJson.trim();
       if (raw) {
-        parsedLocations = JSON.parse(raw);
+        const candidate = JSON.parse(raw);
+        if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+          throw new Error(
+            'El campo Ubicaciones debe ser un objeto JSON (ej. {"ceremony": {...}, "party": {...}}).'
+          );
+        }
+        parsedLocations = candidate;
       }
     } catch (err) {
       Swal.fire({
@@ -724,9 +739,9 @@ export default function HostPanel() {
               </div>
 
               <div className="mb-3">
-                <label className="form-label">Ubicaciones (JSON)</label>
+                <label className="form-label">Ubicaciones (JSON: ceremony / party)</label>
                 <textarea
-                  rows="3"
+                  rows="5"
                   className="form-control font-monospace small"
                   value={editLocationsJson}
                   onChange={(e) => setEditLocationsJson(e.target.value)}

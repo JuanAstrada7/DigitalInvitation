@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import Swal from "sweetalert2";
+import { TEMPLATE_OPTIONS } from "../data/templateThemes";
 import {
   getInvitationBySlug,
   createInvitation,
@@ -470,10 +471,11 @@ export default function Dashboard() {
                   value={templateId}
                   onChange={(e) => setTemplateId(e.target.value)}
                 >
-                  <option value="Vintage">Vintage</option>
-                  <option value="Minimalist">Minimalist</option>
-                  <option value="Classic">Classic</option>
-                  <option value="Festive">Festive</option>
+                  {TEMPLATE_OPTIONS.map((tpl) => (
+                    <option key={tpl.id} value={tpl.id}>
+                      {tpl.label}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="col-md-4">

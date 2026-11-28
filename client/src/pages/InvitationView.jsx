@@ -6,48 +6,8 @@ import Gallery from "../components/Gallery";
 import MusicPlayer from "../components/MusicPlayer";
 import RsvpForm from "../components/RsvpForm";
 import LocationMap from "../components/LocationMap";
+import { getTemplateConfig } from "../data/templateThemes";
 import { getInvitationBySlug, API_URL } from "../services/api";
-
-const TEMPLATES = {
-  minimalist: {
-    label: "Minimalist",
-    pageStyle: { backgroundColor: "#faf9f6", color: "#1f2933", minHeight: "100vh" },
-    cardClass: "card border shadow-none rounded-0 p-4 p-md-5 bg-white",
-    badgeClass: "badge rounded-0 text-bg-light border text-dark",
-    btnClass: "btn btn-dark rounded-0 px-4",
-  },
-  classic: {
-    label: "Classic",
-    pageStyle: { backgroundColor: "#f4efe6", color: "#2c241b", minHeight: "100vh" },
-    cardClass: "card shadow-sm rounded-3 p-4 p-md-5 border-0 bg-white",
-    badgeClass: "badge rounded-pill text-bg-secondary",
-    btnClass: "btn btn-secondary px-4",
-  },
-  festive: {
-    label: "Festive",
-    pageStyle: { backgroundColor: "#fff5f7", color: "#2b192e", minHeight: "100vh" },
-    cardClass: "card shadow rounded-4 p-4 p-md-5 border-0 bg-white",
-    badgeClass: "badge rounded-pill text-bg-danger",
-    btnClass: "btn btn-danger px-4",
-  },
-  vintage: {
-    label: "Vintage",
-    pageStyle: {
-      backgroundColor: "#efe7d6",
-      color: "#3b2d1f",
-      minHeight: "100vh",
-      fontFamily: "Georgia, 'Times New Roman', serif",
-    },
-    cardClass: "card rounded-1 p-4 p-md-5 bg-white border border-warning-subtle shadow-sm",
-    badgeClass: "badge rounded-1 bg-warning-subtle text-dark border border-warning",
-    btnClass: "btn btn-outline-dark rounded-1 px-4",
-  },
-};
-
-function getTemplateConfig(templateId) {
-  const normalizedKey = String(templateId || "minimalist").trim().toLowerCase();
-  return TEMPLATES[normalizedKey] || TEMPLATES.minimalist;
-}
 
 function GiftRegistrySection({ giftRegistry, theme }) {
   if (!giftRegistry || !giftRegistry.enabled) return null;
@@ -75,7 +35,9 @@ function GiftRegistrySection({ giftRegistry, theme }) {
   return (
     <div className={`${theme.cardClass} mt-4`}>
       <h2 className="h5 mb-2">Mesa de regalos</h2>
-      {giftRegistry.message && <p className="text-muted small mb-3">{giftRegistry.message}</p>}
+      {giftRegistry.message && (
+        <p className="text-muted small mb-3">{giftRegistry.message}</p>
+      )}
       <div className="d-flex flex-wrap gap-2">
         {giftRegistry.alias && (
           <button
@@ -174,8 +136,9 @@ export default function InvitationView() {
       <main className="container py-5">
         {isDraft && (
           <div className="alert alert-warning border-warning mb-4" role="alert">
-            <strong>Vista previa en borrador:</strong> esta invitación aún no fue activada.
-            Completá el pago para habilitar el envío por WhatsApp y la confirmación de invitados.
+            <strong>Vista previa en borrador:</strong> esta invitación aún no fue
+            activada. Completá el pago para habilitar el envío por WhatsApp y la
+            confirmación de invitados.
           </div>
         )}
 
@@ -202,7 +165,9 @@ export default function InvitationView() {
           <p className="lead">
             {Array.isArray(eventData.hosts) ? eventData.hosts.join(" & ") : ""}
           </p>
-          {eventData.welcomeMessage && <p className="text-muted">{eventData.welcomeMessage}</p>}
+          {eventData.welcomeMessage && (
+            <p className="text-muted">{eventData.welcomeMessage}</p>
+          )}
           <p className="mb-1">
             <strong>Fecha:</strong>{" "}
             {eventData.eventDate
@@ -225,8 +190,8 @@ export default function InvitationView() {
         ) : (
           <div className={`${theme.cardClass} mt-4`}>
             <p className="mb-0 text-muted small">
-              El formulario de confirmación de asistencia (RSVP) se habilita automáticamente una vez
-              que la invitación esté activa.
+              El formulario de confirmación de asistencia (RSVP) se habilita
+              automáticamente una vez que la invitación esté activa.
             </p>
           </div>
         )}

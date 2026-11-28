@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import Swal from "sweetalert2";
 import { createInvitation } from "../services/api";
+import { TEMPLATE_OPTIONS } from "../data/templateThemes";
 import { CATALOG_MODELS, buildWhatsAppOrderUrl } from "../data/catalogModels";
 
 function generateSlugFromTitle(title) {
@@ -43,8 +44,11 @@ export default function RequestForm() {
   const [submitting, setSubmitting] = useState(false);
   const [createdOrder, setCreatedOrder] = useState(null);
 
+  const normalizedTemplate = String(templateId || "").trim().toLowerCase();
   const selectedModel =
-    CATALOG_MODELS.find((m) => m.templateId === templateId) || CATALOG_MODELS[0];
+    CATALOG_MODELS.find(
+      (m) => String(m.templateId || "").trim().toLowerCase() === normalizedTemplate
+    ) || CATALOG_MODELS[0];
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -75,12 +79,18 @@ export default function RequestForm() {
       .filter(Boolean)
       .join(" | ");
 
-    const locations = [];
+    const locations = {};
     if (ceremonyPlace.trim()) {
-      locations.push({ title: "Ceremonia", address: ceremonyPlace.trim() });
+      locations.ceremony = {
+        title: "Ceremonia",
+        address: ceremonyPlace.trim(),
+      };
     }
     if (partyPlace.trim()) {
-      locations.push({ title: "Fiesta", address: partyPlace.trim() });
+      locations.party = {
+        title: "Fiesta",
+        address: partyPlace.trim(),
+      };
     }
 
     const payload = {
@@ -230,10 +240,11 @@ export default function RequestForm() {
                     value={templateId}
                     onChange={(e) => setTemplateId(e.target.value)}
                   >
-                    <option value="Vintage">Vintage Romance</option>
-                    <option value="Minimalist">Minimalist Blanco</option>
-                    <option value="Festive">Festive Rose</option>
-                    <option value="Classic">Classic Arena</option>
+                    {TEMPLATE_OPTIONS.map((tpl) => (
+                      <option key={tpl.id} value={tpl.id}>
+                        {tpl.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="col-md-6">
